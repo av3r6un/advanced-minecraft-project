@@ -70,6 +70,38 @@ ssh-keygen -t rsa
 sudo yum -y install epel-release php php-fpm phpMyAdmin nginx wget zip php-json php-xml curl 
 ```
 
+- Создаем группу и пользователя
+
+>Мы будем создавать группу для разработчиков нашего проекта и внесём в неё будущий nginx
+>Так он сможет задействовать необходимые ему файлы, запускать их и завершать.
+>
+>Переходим в пользователя root, если этого ещё не сделали. Создаём группу "groupname" и пользователя "username".
+
+
+```bash
+sudo su
+groupadd groupname
+useradd -d /home/username -G groupname, wheel username
+passwd username
+```
+>##### _Группа wheel нужна для того, чтобы у пользователя были права sudo_
+>Комагда _passwd_ нужна для изменения/создания пароля. Она предложит ввести несколько раз
+>новый пароль для пользователя _username_
+
+- _(Опционально)_ Аутентификация созданного пользователя по ssh-ключу
+
+>Чтобы войти в бокс по ssh-ключу не под root, нужно создать отдельную папку
+>в директории по умолчанию данного пользователя и скопировать туда
+>вновь сгенерированный или старый public_key. Затем в конфиге sshd (/etc/ssh/sshd_config)
+>поменять строку AuthorizedKeysFile c _".ssh/authorized_keys"_ на _"~/.ssh/authorized_keys"_
+>
+
+```bash 
+sudo su
+mkdir /home/username/.ssh
+cp ~/.ssh/authorized_keys /home/username/.ssh/authorized_key
+systemctl restart sshd
+```
 
 
 
