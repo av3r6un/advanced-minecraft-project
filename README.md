@@ -190,7 +190,7 @@ CREATE DATABASE main_site DEFAULT CHARACTER SET utf8 DEFAULT COLLATE utf8_genera
 
 ```bash
 systemctl enable php-fpm
-systemctlstart php-fpm
+systemctl start php-fpm
 nano /etc/php-fpm.d/www.conf
 ```
 
