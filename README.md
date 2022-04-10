@@ -1,6 +1,6 @@
 # advanced-minecraft-project
- [Tutorial] **How To Create Minecraft Advanced Project with Launcher, Server, Site & TelegramBot**
- [Туториал] **Делаем продвинутый проект Minecraft ссобственным лаунчером, сервером, сайтом, почтой и телеграм-ботом**
+[Tutorial] **How To Create Minecraft Advanced Project with Launcher, Server, Site & TelegramBot**
+[Туториал] **Делаем продвинутый проект Minecraft ссобственным лаунчером, сервером, сайтом, почтой и телеграм-ботом**
 
 #### _Короткое вступление_:
 
