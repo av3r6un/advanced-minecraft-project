@@ -498,3 +498,5 @@ $CONF['setup_password'] = '$2y$10...BMK';
 ![alt-текст](https://www.dmosk.ru/img/instruktions/postfix-centos/03.jpg "Авторизация postfix_setup")
 
 После этого будет выполнена установка PostFix. После установки в нижней части страницы будет форма добавления суперпользователя, то есть его регистрации.
+
+![alt-текст](https://raw.githubusercontent.com/av3rgun/advanced-minecraft-project/main/src/img/05.jpg "Создание суперпользователя")
