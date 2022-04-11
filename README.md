@@ -760,3 +760,11 @@ openssl req -new -x509 -days 1461 -nodes -out /etc/ssl/mail/public.pem -keyout /
 systemctl enable dovecot
 systemctl start dovecot
 ```
+
+### - Cоздаём первый почтовый ящик
+
+Переходим в адресной строке бразуере по ссылке:
+
+```url
+http://postfix.yourdomain.com/public/
+```
