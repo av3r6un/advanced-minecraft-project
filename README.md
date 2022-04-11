@@ -419,18 +419,18 @@ setenforce 0
 sed -i 's/^SELINUX=.*/SELINUX=disabled/g' /etc/selinux/config
 ```
 
-Теперь установим postfix
+Теперь установим postfixadmin
 
 ```bash
 yum -y install php-mysql php-mbstring php-imap
 systemctl restart php-fpm
-cd /var/tmp && wget https://sourceforge.net/projects/postfixadmin/files/latest/download -O postfix.tar.gz
-mkdir /web/postfix && mkdir /web/postfix/www && tar -C /web/postfix/www -xvf postfix.tar.gz --strip-components 1
+cd /var/tmp && wget https://sourceforge.net/projects/postfixadmin/files/latest/download -O postfixadmin.tar.gz
+mkdir /web/postfix && mkdir /web/postfix/www && tar -C /web/postfix/www -xvf postfixadmin.tar.gz --strip-components 1
 chown -R apache:apache /web/postfix/www
 ```
 >Несмотря на то, что мы используем веб-сервер nginx, php-fpm по умолчанию, запускается от пользователя apache.
 
-Создаем каталог templates_c внутри папки портала (без него не запустится установка) и добавим конфигурационный файл postfix:
+Создаем каталог templates_c внутри папки портала (без него не запустится установка) и добавим конфигурационный файл postfixadmin:
 
 ```bash
 mkdir /web/postfix/www/templates_c
@@ -451,7 +451,7 @@ $CONF['emailcheck_resolve_domain']='NO';
 ```
 > где _configured_ говорит приложению, что администратор закончил его конфигурирование; _default_language_ — используемый язык по умолчанию; _database_password_ — пароль для базы данных, который мы задали на предыдущем шаге; _emailcheck_resolve_domain_ — задает необходимость проверки домена при создании ящиков и псевдонимов.
 
-- Настроим NGINX чтобы postfix открывался на виртуальном домене.
+- Настроим NGINX чтобы postfixadmin открывался на виртуальном домене.
 
 ```bash
 server {
@@ -482,7 +482,7 @@ server {
 
 ![alt-текст](https://www.dmosk.ru/img/instruktions/postfix-centos/02.jpg "Пример хэша postfix")
 
-Теперь открываем конфигурационный файл postfix и вставляем туда скопированную строку:
+Теперь открываем конфигурационный файл postfixadmin и вставляем туда скопированную строку:
 
 ```bash
 nano /web/postfix/www/config.local.php
@@ -500,3 +500,263 @@ $CONF['setup_password'] = '$2y$10...BMK';
 После этого будет выполнена установка PostFix. После установки в нижней части страницы будет форма добавления суперпользователя, то есть его регистрации.
 
 ![alt-текст](https://raw.githubusercontent.com/av3rgun/advanced-minecraft-project/main/src/img/05.jpg "Создание суперпользователя")
+
+
+- Установим postfix
+
+```bash
+yum -y install postfix
+groupadd -g 1024 vmail
+useradd -d /home/mail -g 1024 -u 1024 vmail -m
+```
+
+>Cначала мы создаем группу vmail и guid 1024, после — пользователя vmail с uid 1024 и домашней директорией /home/mail. Обратите внимание, что в некоторых системах идентификатор группы и пользователя 1024 может быть занят. В таком случае необходимо создать другой, а в данной инструкции ниже заменить все 1024 на альтернативный.
+
+Теперь отредактируем конфигурационный файл почтвого сервера:
+
+```bash
+nano /etc/postfix/main.cf
+
+ # Изменяем следующие строки
+
+myorigin = $mydomain
+...
+mydestination = localhost.$mydomain, localhost, localhost.localdomain
+...
+local_recipient_maps = unix:passwd.byname $alias_maps
+...
+mynetworks = 127.0.0.0/8
+...
+inet_interfaces = all
+...
+inet_protocols = all
+...
+myhostname = mx01.yourdomain.com
+
+ # В конец дописываем следующее:
+
+virtual_mailbox_base = /home/mail
+virtual_alias_maps = proxy:mysql:/etc/postfix/mysql_virtual_alias_maps.cf
+virtual_mailbox_domains = proxy:mysql:/etc/postfix/mysql_virtual_domains_maps.cf
+virtual_mailbox_maps = proxy:mysql:/etc/postfix/mysql_virtual_mailbox_maps.cf
+virtual_minimum_uid = 1024
+virtual_uid_maps = static:1024
+virtual_gid_maps = static:1024
+virtual_transport = dovecot
+dovecot_destination_recipient_limit = 1
+
+smtpd_sasl_auth_enable = yes
+smtpd_sasl_exceptions_networks = $mynetworks
+smtpd_sasl_security_options = noanonymous
+broken_sasl_auth_clients = yes
+smtpd_sasl_type = dovecot
+smtpd_sasl_path = private/auth
+
+smtpd_tls_cert_file = /etc/ssl/mail/public.pem
+smtpd_tls_key_file = /etc/ssl/mail/private.key
+smtpd_use_tls = yes
+smtp_use_tls = yes
+smtpd_tls_auth_only = yes
+smtpd_helo_required = yes
+```
+
+Создаем файл с настройками обращения к базе с алиасами:
+
+```bash
+nano /etc/postfix/mysql_virtual_alias_maps.cf
+ 
+ # Вставляем следующее
+
+user = postfix 														# database user
+password = postfix123												# database password
+hosts = localhost													# database host
+dbname = postfix 													# database name
+query = SELECT goto FROM alias WHERE address='%s' AND active = '1'	# database query (Не изменять)
+```
+
+И файл с почтовыми ящиками:
+
+```bash
+nano /etc/postfix/mysql_virtual_mailbox_maps.cf
+
+ # Вставляем следующее:
+
+user = postfix 																					# database user
+password = postfix123																			# database password
+hosts = localhost																				# database host
+dbname = postfix 																				# database name
+query = SELECT CONCAT(domain,'/',maildir) FROM mailbox WHERE username='%s' AND active = '1'		# database йгукн (Не изменять)
+```
+
+Открываем файл master.cf и дописываем в самый конец:
+
+```bash
+nano /etc/postfix/master.cf
+
+ # Вставляем следующее:
+
+submission   inet  n  -  n  -  -  smtpd
+  -o smtpd_tls_security_level=may
+  -o smtpd_sasl_auth_enable=yes
+  -o smtpd_sasl_type=dovecot
+  -o smtpd_sasl_path=/var/spool/postfix/private/auth
+  -o smtpd_sasl_security_options=noanonymous
+  -o smtpd_sasl_local_domain=$myhostname
+
+smtps   inet  n  -  n  -  -  smtpd
+  -o syslog_name=postfix/smtps
+  -o smtpd_tls_wrappermode=yes
+  -o smtpd_sasl_auth_enable=yes
+  -o smtpd_client_restrictions=permit_sasl_authenticated,reject
+
+dovecot   unix  -  n  n  -  -  pipe
+  flags=DRhu user=vmail:vmail argv=/usr/libexec/dovecot/deliver -d ${recipient}
+```
+
+Перезапустим postfix
+
+```bash
+systemctl restart postfix
+```
+
+- Настройка Dovecot
+
+
+```bash
+yum -y install dovecot dovecot-mysql
+
+nano /etc/dovecot/conf.d/10-mail.conf
+
+ # Вставляем следущее:
+
+mail_location = maildir:/home/mail/%d/%u/
+```
+
+>Это нужно для установки хранения способа сообщений
+
+Настраиваем слушателя для аутентификации:
+
+```bash
+nano /etc/dovecot/conf.d/10-master.conf
+
+ # Вставляем следующее:
+
+service auth {
+  unix_listener /var/spool/postfix/private/auth {
+    mode = 0666
+    user = postfix
+    group = postfix
+  }
+  unix_listener auth-userdb {
+    mode = 0600
+    user = vmail
+    group = vmail
+  }
+}
+```
+
+Настраиваем аутентификацию в Dovecot:
+
+```bash
+nano /etc/dovecot/conf.d/10-auth.conf
+
+ # Комментируем одна, снимаем комментарий с другой строки:
+
+#!include auth-system.conf.ext
+!include auth-sql.conf.ext
+```
+
+Настраиваем использование шифрования:
+
+```bash
+nano /etc/dovecot/conf.d/10-ssl.conf
+
+ # Вставляем следующее:
+
+ssl = required
+ssl_cert = </etc/ssl/mail/public.pem
+ssl_key = </etc/ssl/mail/private.key
+```
+
+Настроим автоматическое создание каталогов при первом подключении пользователя к ящику:
+
+```bash
+nano /etc/dovecot/conf.d/15-lda.conf
+
+ # Вставляем следующее:
+
+lda_mailbox_autocreate = yes
+```
+
+Открываем файл:
+
+```bash
+nano /etc/dovecot/conf.d/20-imap.conf
+
+ # Приводим опцию imap_client_workarounds к виду:
+
+imap_client_workarounds = outlook-idle delay-newmail
+```
+
+Настраиваем подключение к нашей базе данных:
+
+```bash
+nano /etc/dovecot/conf.d/auth-sql.conf.ext
+
+ # Вставляем следущее:
+
+passdb {
+  …
+  args = /etc/dovecot/dovecot-sql.conf.ext
+}
+
+userdb {
+  …
+  args = /etc/dovecot/dovecot-sql.conf.ext
+}
+
+```
+
+Создаем файл с настройками работы с mysql:
+
+```bash
+nano /etc/dovecot/dovecot-sql.conf.ext
+
+ # Вставляем следующее
+
+driver = mysql
+connect = host=localhost dbname=postfix user=postfix password=postfix123
+default_pass_scheme = MD5-CRYPT
+password_query = SELECT password FROM mailbox WHERE username = '%u'
+user_query = SELECT maildir, 1024 AS uid, 1024 AS gid FROM mailbox WHERE username = '%u'
+user_query = SELECT CONCAT('/home/mail/',LCASE(`domain`),'/',LCASE(`maildir`)), 1024 AS uid, 1024 AS gid FROM mailbox WHERE username = '%u'
+```
+
+И, напоследок, настраиваем интерфейс, на котором будет слушать dovecot:
+
+```bash
+nano /etc/dovecot/dovecot.conf
+
+ # Вставляем следующее:
+
+listen = *
+```
+
+### - Генерируем сертификаты безопасности
+
+Создаем каталог, в котором разместим сертификаты:
+
+```bash
+mkdir -p /etc/ssl/mail
+
+ # И сгенерируем их следующей командой:
+
+openssl req -new -x509 -days 1461 -nodes -out /etc/ssl/mail/public.pem -keyout /etc/ssl/mail/private.key -subj "/C=RU/ST=SPb/L=SPb/O=Global Security/OU=IT Department/CN=relay.yourdomain.com"
+```
+
+Запускаем dovecot:
+
+```bash
+systemctl enable dovecot
+systemctl start dovecot
+```
