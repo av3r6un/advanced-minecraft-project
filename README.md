@@ -474,5 +474,27 @@ server {
 }
 ```
 
-Переходим по ссылке http://postfix.yourdomain.com/public/setup.php для первоначальной настройки. Задаём дважды пароль установки и генерируем хэш, нажав на кнопку **Generate setup_password hash**:
+Переходим по ссылке postfix.yourdomain.com/public/setup.php для первоначальной настройки. Задаём дважды пароль установки и генерируем хэш, нажав на кнопку **Generate setup_password hash**:
+
 ![alt-текст](https://www.dmosk.ru/img/instruktions/postfix-centos/01.jpg "Генерация setup_password hash")
+
+После перезагрузки страницы копируем хэш:
+
+![alt-текст](https://www.dmosk.ru/img/instruktions/postfix-centos/02.jpg "Пример хэша postfix")
+
+Теперь открываем конфигурационный файл postfix и вставляем туда скопированную строку:
+
+```bash
+nano /web/postfix/www/config.local.php
+```
+
+```php
+...
+$CONF['setup_password'] = '$2y$10...BMK';
+```
+
+Теперь нужно перезагрузить страницу и ввести тот пароль, который вы использовали для генерации хэша:
+
+![alt-текст](https://www.dmosk.ru/img/instruktions/postfix-centos/03.jpg "Авторизация postfix_setup")
+
+После этого будет выполнена установка PostFix. После установки в нижней части страницы будет форма добавления суперпользователя, то есть его регистрации.
