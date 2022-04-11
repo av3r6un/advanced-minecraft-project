@@ -768,3 +768,94 @@ systemctl start dovecot
 ```url
 http://postfix.yourdomain.com/public/
 ```
+
+Вводим логин и пароль от суперпользователя. Перед нами появляется страница управления учетными записями. Переход в **Список доменов** и выбриаем **Новый домен**. Заполняем формы и нажимаем **Добавить домен**
+
+![alt-текст](https://raw.githubusercontent.com/av3rgun/advanced-minecraft-project/main/src/img/06.jpg "Создание домена")
+
+Теперь **Обзор** -> **Создать ящик**. Вводим данные нового пользователя и нажимаем создать ящик.
+
+### - Устанавливаем и настраиваем Roundcube Webmail
+
+Создадим папку, где будет располагаться наш WebMail, скачаем туда Roundcube, настроим и проверим в действии.
+
+```bash
+mkdir /web/webmail & mkdir /web/webmail/www
+wget https://github.com/roundcube/roundcubemail/releases/download/1.5.2/roundcubemail-1.5.2.tar.gz
+tar -xvf roundcubemail-*.tar.gz --strip-components 1
+
+cp /web/webmail/www/config/config.inc.php.sample /web/webmail/www/config/config.inc.php
+nano /web/webmail/www/config/config.inc.php
+
+ # Меняем на наши данные
+
+$config['db_dsnw'] = 'mysql://roundcube:roundcube123@localhost/roundcubemail';
+$config['enable_installer'] = true;
+
+$config['drafts_mbox'] = 'Drafts';        #Черновики
+$config['junk_mbox'] = 'Junk';            #СПАМ
+$config['sent_mbox'] = 'Sent';            #Отправленные
+$config['trash_mbox'] = 'Trash';          #Корзина  
+$config['create_default_folders'] = true; #Создать папки по-умолчанию
+```
+
+```bash
+chown -R nginx:nginx /web/webmail/www
+mysql -u root -p
+```
+
+Создаём базу, пользователя и передаём привилегии ему:
+
+```sql
+CREATE DATABASE roundcubemail DEFAULT CHARACTER SET utf8 COLLATE utf8_general_ci;
+GRANT ALL PRIVILEGES ON roundcubemail.* TO 'roundcube'@'localhost' IDENTIFIED BY 'yoursecretpassword'
+quit
+```
+
+```bash
+mysql -uroot -p roundcubemail < /usr/share/nginx/html/webmail/SQL/mysql.initial.sql
+```
+
+- Установим компоненты необходимыеы для Roundcube Mail
+
+```bash
+yum -y install php-pear php-mcrypt php-intl php-ldap php-pear-Net-SMTP php-pear-Net-IDNA2 php-pear-Mail-Mime php-imagick
+
+```
+
+Настроим php:
+
+```bash
+nano /etc/php.ini
+
+ # Меняем
+
+date.timezone = "Europe/Moscow"
+...
+allow_url_fopen = On
+```
+
+```bash
+systemctl restart php-fpm
+```
+
+Перейдём к настройке Roundcube. Идём по пути http://webmail.divine.world/installer/. В самом низу нажимаем по кнопке Next. Если кнопка будет неактивна, проверяем, что нет ошибок (NOT OK). На следующей странице проверяем, что все пункты находятся в состоянии OK. Установка выполнена. 
+
+Изменяем конфиг WebMail, убираем installer:
+
+```bash
+nano /web/webmail/www/config/config.inc.php
+rm -rf /usr/share/nginx/html/webmail/installer
+
+ # Вставляем следующее:
+
+$config ['enable_installer'] = false
+```
+
+Если при отправке сообщения мы видим ошибку авторизации SMTP, открываем конфигурационный файл roundcube и добавляем следующую строчку:
+
+```php
+$config['smtp_pass'] = '';
+```
+
+На этом, мы закончили с установкой WebMail Client и WebMail Server.
