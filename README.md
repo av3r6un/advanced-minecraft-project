@@ -184,12 +184,18 @@ mysql-secure-installation
 mysql -u root -p
 ```
 
-Создадим нового пользователя, который может подключаться с любого IP-адреса и дадим ему права на упрвление таблицами и создание новых пользователей.
+Создадим нового пользователя, который может подключаться с любого IP-адреса и дадим ему права на упрвление таблицами и создание новых пользователей, а также добавим базу и пользователя для PostFix. Если нет нужды в WebMailServer пропускаем вторую часть
 
 ```sql
 CREATE USER 'superuser'@'%' IDENTIFIED BY 'yoursecretpassword';
 GRANT ALL ON *.* to 'superuser' WITH GRANT OPTION;
 FLUSH PRIVILEGES;
+
+ # Создание базы данных для postfix.
+
+CREATE DATABASE postfix DEFAULT CHARACTER SET utf8 DEFAULT COLLATE utf8_general_ci;
+GRANT ALL ON postfix.* TO 'postfix'@'localhost' IDENTIFIED BY 'yoursecretpassword';
+\q
 ```
 
 Ну и на последок создадим базу данных для нашего сайта. Куда будет подключаться и сервер и сайт и лаунчер.
@@ -355,7 +361,7 @@ server {
 		expires 10d;
 	}
 	location / {
-    	alias /web/pma/www/phpMyAdmin/;
+    		alias /web/pma/www/phpMyAdmin/;
 		index index.php;
 		try_files $uri $uri/ /index.php?$args;
 		
@@ -363,9 +369,9 @@ server {
 		deny all;
 
 		location ~ \.php$ {
-				fastcgi_pass unix:/run/php-fpm/www.sock;
+			fastcgi_pass unix:/run/php-fpm/www.sock;
     			fastcgi_index index.php;
-   				include fastcgi_params;
+   			include fastcgi_params;
     			fastcgi_param DOCUMENT_ROOT $document_root;
     			fastcgi_param SCRIPT_FILENAME $document_root$fastcgi_script_name;
     			fastcgi_param PATH_TRANSLATED $document_root$fastcgi_script_name;
@@ -377,11 +383,96 @@ server {
 
 	            
 	    location ~* ^/(.+.(jpg|jpeg|gif|css|png|js|ico|html|xml|txt))$ {
-	       	alias /web/pma/www/phpMyAdmin/$1;
+	    	alias /web/pma/www/phpMyAdmin/$1;
 	    }
 
     }
 }
 ```
 
+Можно проверить встал ли phpMyAdmin перейдя по ссылке pma.yourdomain.com. Но перед этим, нужно перезагрузить nginx httpd и php-fpm, а также выдать права доступа папке NGINX'у.
 
+```bash
+chmod -R 775 /web/pma/www
+chown -R nginx:nginx /web
+systemctl restart nginx httpd php-fpm
+```
+
+### - Настроим WebMail Server и WebMail Client
+
+>В данную связку входят несколько зависимостей, сначала мы всех их установим. Каждый настраивается отдельно, занимает некоторое время.
+> Если нет нужды в WebMailServer то можно перейти к следующему пункту
+
+
+Задаем временную зону (в данном примере московское время):
+
+```bash
+timedatectl set-timezone Europe/Moscow
+yum -y update
+```
+- Отключение SELinux
+
+Для отключения дополнительного компонента безопасности вводим 2 команды:
+
+```bash
+setenforce 0
+sed -i 's/^SELINUX=.*/SELINUX=disabled/g' /etc/selinux/config
+```
+
+Теперь установим postfix
+
+```bash
+yum -y install php-mysql php-mbstring php-imap
+systemctl restart php-fpm
+cd /var/tmp && wget https://sourceforge.net/projects/postfixadmin/files/latest/download -O postfix.tar.gz
+mkdir /web/postfix && mkdir /web/postfix/www && tar -C /web/postfix/www -xvf postfix.tar.gz --strip-components 1
+chown -R apache:apache /web/postfix/www
+```
+>Несмотря на то, что мы используем веб-сервер nginx, php-fpm по умолчанию, запускается от пользователя apache.
+
+Создаем каталог templates_c внутри папки портала (без него не запустится установка) и добавим конфигурационный файл postfix:
+
+```bash
+mkdir /web/postfix/www/templates_c
+nano /web/postfix/www/config.local.php
+```
+
+И добавим следующее:
+
+```php
+<?php
+
+$CONF['configured'] = true;
+$CONF['default_language'] = 'ru';
+$CONF['database_password'] = 'postfix123';
+$CONF['emailcheck_resolve_domain']='NO';
+
+?>
+```
+> где _configured_ говорит приложению, что администратор закончил его конфигурирование; _default_language_ — используемый язык по умолчанию; _database_password_ — пароль для базы данных, который мы задали на предыдущем шаге; _emailcheck_resolve_domain_ — задает необходимость проверки домена при создании ящиков и псевдонимов.
+
+- Настроим NGINX чтобы postfix открывался на виртуальном домене.
+
+```bash
+server {
+    listen       80;
+    server_name postfix.yourdomain.com;
+    set $root_path /usr/share/nginx/html;
+
+    location / {
+        root $root_path;
+        index index.php;
+    }
+
+    location ~ \.php$ {
+        fastcgi_pass unix:/run/php-fpm/www.sock;
+        fastcgi_index index.php;
+        fastcgi_param SCRIPT_FILENAME $root_path$fastcgi_script_name;
+        include fastcgi_params;
+        fastcgi_param DOCUMENT_ROOT $root_path;
+    }
+}
+```
+
+Переходим по ссылке http://postfix.yourdomain.com/public/setup.php для первоначальной настройки. Задаём дважды пароль установки и генерируем хэш, нажав на кнопку **Generate setup_password hash**:
+![alt-текст](https://www.dmosk.ru/img/instruktions/postfix-centos/01.jpg "Генерация setup_password hash")
