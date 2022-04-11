@@ -115,7 +115,28 @@ systemctl restart sshd
 - Установим необходимые зависимости для проекта
 
 ```bash
-yum -y install epel-release nginx mariadb mariadb-server wget curl unzip nano
+yum -y install epel-release nginx mariadb mariadb-server wget curl unzip nano httpd
+```
+
+- Настроим Apache
+
+Apache требует дополнительной настройки при установке в паре с NGINX. Так и NGINX нужно дополнительно настроивать. Чтобы они не конфиктовали между собой, пусть Apache слушает порт 8080, так как NGINX по умолчанию слушает 80 порт.
+
+```bash
+nano /etc/httpd/conf/httpd.conf
+```
+
+```bash
+...
+Listen :8080
+ServerName yourdomain.com:8080
+```
+
+Запустим его и проверим на работоспособность. Если система не вывела ошибок при запуске демона httpd, значит всё настроено правильно и мы можем двигать к следующему пункту.
+
+```bash
+systemctl start httpd
+systemctl enable httpd
 ```
 
 - Теперь необходимо установить php последней версии. Делается чем репозиторий remi.
@@ -222,5 +243,145 @@ mv /var/tmp/phpMyAdmin-*-all-languages.zip /web/pma/www
 cd /web/pma/www && unzip phpMyAdmin-*-all-language.zip && rm phpMyAdmin-*-all-languages.zip
 ```
 
+Так, мы создали папку, в которой будет лежать phpMyAdmin. Теперь настроим Apache, что он правильно слушал поддомен сайта.
+Добавляем в самый конец конфигурационного файла Apache следующую строку:
+
+```bash
+...
+IncludeOptional conf.d/*.conf
+```
+
+>Скорее всего она по умолчанию будет присутствовать, нужно будет только расскомментировать её.
+
+После установки phpMyAdmin должен был создаться конфигурационный файл для Apache. Если он не создался или выглядит по другому, приведите его к такому виду.
+
+```bash
+nano /etc/httpd/conf.d/phpMyAdmin.conf
+```
+
+**Вот пример:**
+```bash
+Alias /phpMyAdmin /web/pma/www/phpMyAdmin
+Alias /phpmyadmin /web/pma/www/phpMyAdmin
+
+<Directory /web/pma/www/phpMyAdmin/>
+   AddDefaultCharset UTF-8
+
+   <IfModule mod_authz_core.c>
+     <RequireAny>
+       #Require ip 127.0.0.1
+       #Require ip ::1
+     </RequireAny>
+   </IfModule>
+   <IfModule !mod_authz_core.c>
+     Order Deny,Allow
+     Deny from All
+     Allow from 127.0.0.1
+     Allow from ::1
+   </IfModule>
+</Directory>
+
+<Directory /web/pma/www/phpMyAdmin/setup/>
+   <IfModule mod_authz_core.c>
+     <RequireAny>
+       Require ip 127.0.0.1
+       Require ip ::1
+     </RequireAny>
+   </IfModule>
+   <IfModule !mod_authz_core.c>
+     Order Deny,Allow
+     Deny from All
+     Allow from 127.0.0.1
+     Allow from ::1
+   </IfModule>
+</Directory>
+
+<Directory /web/pma/www/phpMyAdmin/libraries/>
+   <IfModule mod_authz_core.c>
+     Require all denied
+   </IfModule>
+   <IfModule !mod_authz_core.c>
+     Order Deny,Allow
+     Deny from All
+     Allow from None
+   </IfModule>
+</Directory>
+
+<Directory /web/pma/www/phpMyAdmin/setup/lib/>
+   <IfModule mod_authz_core.c>
+     Require all denied
+   </IfModule>
+   <IfModule !mod_authz_core.c>
+     Order Deny,Allow
+     Deny from All
+     Allow from None
+   </IfModule>
+</Directory>
+
+<Directory /web/pma/www/phpMyAdmin/setup/frames/>
+   <IfModule mod_authz_core.c>
+     Require all denied
+   </IfModule>
+   <IfModule !mod_authz_core.c>
+     # Apache 2.2
+     Order Deny,Allow
+     Deny from All
+     Allow from None
+   </IfModule>
+</Directory>
+```
+- Теперь настроим NGINX для phpMyAdmin
+
+```bash
+nano /etc/nginx/conf.d/pma.conf
+```
+
+```bash
+server {
+	listen 80;
+	server_name pma.yourdomain.com www.pma.yourdomain.com;
+
+	gzip on;
+	gzip_disable "msie6";
+	gzip_min_length 1000;
+	gzip_vary on;
+	gzip_proxied expired no-cache no-store private auth;
+	gzip_types text/plain text/css application/json application/x-javascript text/xml application/xml application/xml+rss text/javascript application/javascript;
+
+	access_log /web/pma/logs/access.log;
+	
+	location ~* ^.+\.(jpg|jpeg|gif|png|css|zip|tgz|gz|rar|bz2|doc|docx|xls|xlsx|exe|pdf|ppt|tar|wav|bmp|rtf|js)$ {
+		root /web/pma/www;
+		expires 10d;
+	}
+	location / {
+    	alias /web/pma/www/phpMyAdmin/;
+		index index.php;
+		try_files $uri $uri/ /index.php?$args;
+		
+		allow your.public.ip.address;
+		deny all;
+
+		location ~ \.php$ {
+				fastcgi_pass unix:/run/php-fpm/www.sock;
+    			fastcgi_index index.php;
+   				include fastcgi_params;
+    			fastcgi_param DOCUMENT_ROOT $document_root;
+    			fastcgi_param SCRIPT_FILENAME $document_root$fastcgi_script_name;
+    			fastcgi_param PATH_TRANSLATED $document_root$fastcgi_script_name;
+    			fastcgi_param QUERY_STRING $query_string;
+    			fastcgi_param REQUEST_METHOD $request_method;
+    			fastcgi_param CONTENT_TYPE $content_type;
+    			fastcgi_param HTTP_PROXY "";
+		}
+
+	            
+	    location ~* ^/(.+.(jpg|jpeg|gif|css|png|js|ico|html|xml|txt))$ {
+	       	alias /web/pma/www/phpMyAdmin/$1;
+	    }
+
+    }
+}
+```
 
 
