@@ -742,7 +742,7 @@ nano /etc/dovecot/dovecot.conf
 listen = *
 ```
 
-### - Генерируем сертификаты безопасности
+#### - Генерируем сертификаты безопасности
 
 Создаем каталог, в котором разместим сертификаты:
 
@@ -761,7 +761,7 @@ systemctl enable dovecot
 systemctl start dovecot
 ```
 
-### - Cоздаём первый почтовый ящик
+#### - Cоздаём первый почтовый ящик
 
 Переходим в адресной строке бразуере по ссылке:
 
@@ -775,7 +775,7 @@ http://postfix.yourdomain.com/public/
 
 Теперь **Обзор** -> **Создать ящик**. Вводим данные нового пользователя и нажимаем создать ящик.
 
-### - Устанавливаем и настраиваем Roundcube Webmail
+#### - Устанавливаем и настраиваем Roundcube Webmail
 
 Создадим папку, где будет располагаться наш WebMail, скачаем туда Roundcube, настроим и проверим в действии.
 
@@ -839,7 +839,7 @@ allow_url_fopen = On
 systemctl restart php-fpm
 ```
 
-Перейдём к настройке Roundcube. Идём по пути http://webmail.divine.world/installer/. В самом низу нажимаем по кнопке Next. Если кнопка будет неактивна, проверяем, что нет ошибок (NOT OK). На следующей странице проверяем, что все пункты находятся в состоянии OK. Установка выполнена. 
+Перейдём к настройке Roundcube. Идём по пути http://webmail.yourdomain.com/installer/. В самом низу нажимаем по кнопке Next. Если кнопка будет неактивна, проверяем, что нет ошибок (NOT OK). На следующей странице проверяем, что все пункты находятся в состоянии OK. Установка выполнена. 
 
 Изменяем конфиг WebMail, убираем installer:
 
@@ -858,4 +858,118 @@ $config ['enable_installer'] = false
 $config['smtp_pass'] = '';
 ```
 
-На этом, мы закончили с установкой WebMail Client и WebMail Server.
+#### На этом, мы закончили с установкой WebMail Client и WebMail Server.
+
+### - uWSGI Приложение
+
+>Чтобы запускать Flask на VPS/VDS сервер необходиму установить некоторое окружение. Нужно установить Python и модуль uWSGI.
+
+Установим Python:
+
+```bash
+yum -y install python3 python-pip python3-devel gcc
+```
+
+Теперь установить модуль виртуального окружения. Он нужен для того, что веб-сервер запускался демоном Linux.
+
+```bash
+pip install virtualenv
+```
+
+Создадим папку под наш сайт:
+
+```bash
+mkdir /web/main_site && mkdir /web/main_site/www && cd /web/main_site/www
+```
+
+Установим виртуальное окружение в эту папку:
+
+```bash
+virtualenv main_site-venv
+
+ # Активируем его командой:
+
+source main_site-venv/bin/activate
+```
+
+Осталось установить необходимые модуля для нормальной работы сайта:
+
+```bash
+pip3 install flask uwsgi
+
+ # После успешной установки отключим виртуальное окружение командой:
+
+deactivate
+```
+
+Создадим конфигурационный .ini файл для uWSGI и заполним его:
+
+```bash
+nano /web/main-site/www/main_site.ini
+```
+
+```ini
+[uswgi]
+module = wsgi:app
+
+master = true
+proccesses = 3
+socket = /web/main_site/sockets/main_site.sock
+chmod-socket = 660
+vacuum = true
+
+die-on-term = true
+logto = /web/main_site/logs/main_site.log
+```
+
+Создадим демона Linux для нашего веб-сервера:
+
+```bash
+nano /etc/systemd/system/main_site.service
+```
+
+```systemd
+[Unit]
+Description=Your project desc
+After=network.target
+
+[Service]
+User=nginx
+Group=nginx
+WorkingDirectory=/web/main_site/www
+Environment="PATH=/web/main_site/www/main_site-venv/bin"
+ExecStart=/web/main_site/www/main_site-venv/bin/uwsgi --ini main_site.ini
+
+[Install]
+WantedBy=multi-user.target
+```
+
+Настроем NGINX:
+
+```bash
+nano /etc/nginx/conf.d/main_site.conf
+```
+
+```conf
+server {
+  listen 80;
+  server_name yourdomain.com www.yourdomain.com;
+
+  location / {
+    include uwsgi_params;
+    uwsgi_pass unix:/web/main_site/sockets/main_site.sock;
+  }
+}
+```
+
+Связка uWSGI сайт, WebMail Server, MariaDB и phpMyAdmin готова. Перейдём у установке и настройке самого главного.
+
+### - GravitLauncher и Minecraft Server (Mohist)
+
+Будет создавать сервер на 1.12.2 с ядром Mohist. Выбрали это ядро, т.к. оно хорошо работает в связке с GravitLauncher'ом и отлично оптимизировано. Консультироваться можно [оф. документацией GravitLauncher'а.](https://launcher.gravit.pro/install)
+
+
+
+
+
+
