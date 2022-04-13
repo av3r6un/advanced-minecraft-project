@@ -149,7 +149,10 @@ ls
 
 Выйдет список файлов, установленных вместе с репозиторием. Нам нужно установить последнюю версию php. Файл будет называться remi-php81.repo. Его нужно открыть редактором nano и включить (параметр enabled переверсти в положение 1). Пример ниже:
 
->/// {Встать картнку примера включение новой версии php}
+![alt-текст](https://raw.githubusercontent.com/av3rgun/advanced-minecraft-project/main/src/img/07.jpg "каталог /etc/yum.repos.d/")
+
+![alt-текст](https://raw.githubusercontent.com/av3rgun/advanced-minecraft-project/main/src/img/08.jpg "Включение нужной версии php")
+
 
 - Дальше будет обычная установка php.
 
@@ -966,8 +969,131 @@ server {
 
 ### - GravitLauncher и Minecraft Server (Mohist)
 
-Будет создавать сервер на 1.12.2 с ядром Mohist. Выбрали это ядро, т.к. оно хорошо работает в связке с GravitLauncher'ом и отлично оптимизировано. Консультироваться можно [оф. документацией GravitLauncher'а.](https://launcher.gravit.pro/install)
+Будет создавать сервер на 1.12.2 с ядром Mohist. Выбрали это ядро, т.к. оно хорошо работает в связке с GravitLauncher'ом и отлично оптимизировано. Консультироваться можно [оф. документацией GravitLauncher'а.](https://launcher.gravit.pro/install). Есть моменты, которые я буду подробно рассматривать, но в целом, всё ясно описано там.
 
+- Приступим. Начнём с установка LaunchServer'а
+
+```bash
+echo | tee /etc/yum.repos.d/bellsoft.repo > /dev/null << EOF
+[BellSoft]
+name=BellSoft Repository
+baseurl=https://yum.bell-sw.com
+enabled=1
+gpgcheck=1
+gpgkey=https://download.bell-sw.com/pki/GPG-KEY-bellsoft
+priority=1
+EOF
+```
+Обновим, установим Java17 и Java 8 (для запуска сервера):
+
+```bash
+yum -y update
+yum -y install bellsoft-java17-full java-1.8.0-openjdk
+```
+
+Сделаем Java17 по умолчанию командой:
+
+```bash
+alternatives --config java
+
+ # Нужно выбрать номер рядом с Java17 и нажать Enter
+```
+
+А путь до Java8 внесём в виртуальное окружение Linux:
+
+```bash
+alternatives --config java
+
+ # Скопирвать путь до Java8
+
+mkdir /home/server && cd /home/server
+
+nano .bash_profile
+
+ # Внесём путь до Java8 в "export"
+
+export JAVA8=/path/to/java8
+
+ # Сохраним и обновим файл
+
+source .bash_profile
+
+ # Проверим
+
+echo JAVA8
+```
+
+Начнём установку LauncheServer'а:
+
+```bash
+mkdir /home/launcher && cd /home/launcher
+
+curl -o setup.sh https://mirror.gravit.pro/scripts/setup-master.sh && chmod +x setup.sh && ./setup.sh
+
+ # После того как всё установить, нужно запустить LaunchServer, чтобы догрузились необходимые файлы
+
+./start.sh
+
+ # Остановим LaunchServer и перейдём к его настройке.
+
+stop
+```
+LaunchServer использует WebSockets поэтому нужно настроить NGINX для него:
+
+```bash
+nano /etc/nginx/conf.d/launcher.conf
+```
+
+```nginx
+server {
+        listen 80 http2;
+        server_name ВАШДОМЕН.ru;
+        location / {
+                root /home/launcher/updates;
+        }
+        location /api {
+                proxy_pass http://127.0.0.1:9274/api;
+                proxy_set_header Host $host;
+                proxy_set_header X-Real-IP $remote_addr;
+                proxy_set_header X-Forwarded-Proto $scheme;
+                proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        }
+        location /webapi/ {
+                proxy_pass http://127.0.0.1:9274/webapi/;
+                proxy_set_header Host $host;
+                proxy_set_header X-Real-IP $remote_addr;
+                proxy_set_header X-Forwarded-Proto $scheme;
+                proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        }
+}
+```
+
+Что касается авторизации, на указанном [ресурсе](https://launcher.gravit.pro/auth/#метод-mysql) достаточно подробно описано, не будет долго зацикливаться на этом. Также, настройку клиента пропустим, так как нужно просто установить клиенты и ассеты, как написано в документации. Всё из коробки пропатчено и вам ничего делать не нужно. Перейдём к установке и настройке сервера.
+
+#### - Настройка Mohist
+
+```bash
+cd /home/server 
+
+ # Скопируем ServerWrapper из артефактов сборки LaunchServer'a
+
+cp /home/launcher/src/ServerWrapper/build/libs/ServerWrapper.jar /home/server
+
+ # Запустим ServerWrapper Jav'ой 8
+
+$JAVA8 -jar ServerWrapper.jar setup
+
+ # Введем все данные которые запросит ServerWrapper для корректной настройки
+
+```
+
+Дальше нужно пропатчить сервер под GravitLauncher. Откройте папку /home/launcher/updates/_client_name_/libraries/com/mojang/_ВЕРСИЯ_/. Скопируйте файл authlib-_ВЕРСИЯ_.jar на локальное устройство (к себе на компьютер) и разархивируйте его. Теперь перейдите в /home/server/libraries/net/minecraft/1.12.2 и также скопируйте файл сервера к себе на компьютер. Откройте файл сервера архиватором и скопируйте с заменой содержимое разархивированного authlib'a. Так же нужно будет добавить launchwrapper командой:
+
+```bash
+wget -q -O ./libraries/net/minecraft/launchwrapper/1.12/launchwrapper-1.12.jar https://mirror.gravit.pro/compat/launchwrapper-1.12-5.0.x-fixed.jar
+```
+
+Мы пропатчили сервер под GravitLauncher. Поздравляю! На этом можно заканчивать. Спасибо, что дочитали до конца. Оставляю здесь все необходимые ссылки для консультаций.
 
 
 
