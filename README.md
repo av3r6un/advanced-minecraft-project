@@ -912,11 +912,11 @@ nano /web/main-site/www/main_site.ini
 ```
 
 ```ini
-[uswgi]
+[uwsgi]
 module = wsgi:app
 
 master = true
-proccesses = 3
+processes = 3
 socket = /web/main_site/sockets/main_site.sock
 chmod-socket = 660
 vacuum = true
