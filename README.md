@@ -1095,6 +1095,9 @@ wget -q -O ./libraries/net/minecraft/launchwrapper/1.12/launchwrapper-1.12.jar h
 
 Мы пропатчили сервер под GravitLauncher. Поздравляю! На этом можно заканчивать. Спасибо, что дочитали до конца. Оставляю здесь все необходимые ссылки для консультаций.
 
+# Полезные ссылки
+
+[certbot](https://pocketadmin.tech/ru/certbot-%D0%BD%D0%B0-centos/)
 
 
 
